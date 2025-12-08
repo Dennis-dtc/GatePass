@@ -146,10 +146,13 @@ export default function SecurityHome() {
         lastVerifiedAt: new Date(),
         lastScannedBy: securityUID
       });
+
       alert("Device verified & clocked in.");
-      // clear results and return to scanner standby
-      setScannedResults(null);
-      setScannerMode("qr");
+
+      // KEEP camera OFF, keep list visible
+      setScannerMode(null);
+      setScannedResults(prev => prev);
+
     } catch (err) {
       console.error("verify error", err);
       alert("Verify failed: " + (err.message || err));
@@ -163,14 +166,19 @@ export default function SecurityHome() {
         lastVerifiedAt: new Date(),
         lastScannedBy: securityUID
       });
+
       alert("Device clocked out.");
-      setScannedResults(null);
-      setScannerMode("qr");
+
+      // KEEP camera OFF, keep list visible
+      setScannerMode(null);
+      setScannedResults(prev => prev);
+
     } catch (err) {
       console.error("clockout error", err);
       alert("Clock out failed: " + (err.message || err));
     }
   };
+
 
 const printStickers = async (devicesToPrint) => {
   // Simple QR generator using a canvas (no external libs)

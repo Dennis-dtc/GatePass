@@ -7,10 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "firebase": "^12.6.0",
+    "framer-motion": "^12.23.25",
+    "gh-pages": "^6.3.0",
     "html5-qrcode": "^2.3.8",
     "jsbarcode": "^3.12.1",
     "lucide-react": "^0.556.0",

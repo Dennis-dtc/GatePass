@@ -1,5 +1,5 @@
 // src/components/Scanner.jsx
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 
 export default function Scanner({
@@ -9,135 +9,91 @@ export default function Scanner({
   continuous = false,
   formats = null
 }) {
-  const containerIdRef = useRef(`scanner-${Math.random().toString(36).slice(2, 9)}`);
-  const html5Ref = useRef(null);
-  const stoppedRef = useRef(false);
-
+  const containerId = useRef("scan-" + Math.random().toString(36).slice(2));
+  const scannerRef = useRef(null);
   const [flash, setFlash] = useState(false);
-  const [active, setActive] = useState(true);
 
-  // Start Scanner
   useEffect(() => {
-    stoppedRef.current = false;
+    let stopped = false;
 
-    const startScanner = async () => {
+    const start = async () => {
       try {
-        const scanner = new Html5Qrcode(containerIdRef.current);
-        html5Ref.current = scanner;
+        const scanner = new Html5Qrcode(containerId.current);
+        scannerRef.current = scanner;
 
-        const config = { fps: 10, qrbox };
+        const config = {
+          fps: 12,
+          qrbox,
+        };
         if (formats) config.formatsToSupport = formats;
 
         await scanner.start(
           { facingMode: "environment" },
           config,
-          (decodedText) => {
+          (text) => {
             setFlash(true);
-            setTimeout(() => setFlash(false), 150);
+            setTimeout(() => setFlash(false), 120);
 
             if (!continuous) {
-              scanner.stop().then(() => scanner.clear()).finally(() => {
-                if (!stoppedRef.current) {
-                  stoppedRef.current = true;
-                  setActive(false);
-                  onDetected && onDetected(decodedText);
-                }
-              });
+              // non-continuous → stop after one scan
+              scanner.stop().then(() => scanner.clear());
+              if (!stopped) onDetected(text);
             } else {
-              onDetected && onDetected(decodedText);
+              // continuous → keep camera running
+              onDetected(text);
             }
           },
           () => {}
         );
       } catch (err) {
-        console.error("Scanner failed to start:", err);
+        console.error("SCAN ERROR:", err);
       }
     };
 
-    const t = setTimeout(startScanner, 80);
+    start();
 
     return () => {
-      stoppedRef.current = true;
-      clearTimeout(t);
+      stopped = true;
       (async () => {
         try {
-          if (html5Ref.current) {
-            await html5Ref.current.stop();
-            await html5Ref.current.clear();
+          if (scannerRef.current) {
+            await scannerRef.current.stop();
+            await scannerRef.current.clear();
           }
         } catch {}
       })();
     };
   }, []);
 
-  // Ensure video covers full container
-  useEffect(() => {
-    const fixVideo = () => {
-      const wrapper = document.getElementById(containerIdRef.current);
-      if (!wrapper) return;
-
-      const video = wrapper.querySelector("video");
-      if (video) {
-        video.style.width = "100%";
-        video.style.height = "100%";
-        video.style.objectFit = "cover";
-        video.style.position = "absolute";
-        video.style.top = "0";
-        video.style.left = "0";
-      }
-    };
-
-    const interval = setInterval(fixVideo, 150);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleClose = async () => {
-    stoppedRef.current = true;
-    try {
-      if (html5Ref.current) {
-        await html5Ref.current.stop();
-        await html5Ref.current.clear();
-      }
-    } catch {}
-    onClose && onClose();
-  };
-
   return (
-<div className="relative w-full h-full bg-black flex items-center justify-center">
+    <div className="relative w-full h-full bg-black">
+      {/* Camera container */}
+      <div
+        id={containerId.current}
+        className="absolute inset-0 w-full h-full"
+        style={{ objectFit: "cover" }}
+      />
 
-  {/* Scanner container fills screen height */}
-  <div
-    id={containerIdRef.current}
-    className="w-full h-full relative overflow-hidden rounded-xl"
-  />
+      {/* Close button */}
+      <button
+        onClick={onClose}
+        className="absolute top-3 right-3 z-50 bg-red-600 text-white px-3 py-1 rounded"
+      >
+        Close
+      </button>
 
-  {/* Close button */}
-  <button
-    onClick={handleClose}
-    className="absolute top-4 right-4 z-50 px-4 py-1 rounded bg-red-600 text-white shadow"
-  >
-    Close
-  </button>
+      {/* Center scan box */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none color-white">
+        <div
+          className="border-4 border-black/60 rounded-md"
+          style={{ width: qrbox, height: qrbox }}
+        />
+      </div>
 
-  {/* Center QR scanning square */}
-  <div className="absolute flex items-center justify-center inset-0 pointer-events-none">
-    <div
-      style={{ width: qrbox, height: qrbox }}
-      className={`
-        rounded-md border-4 
-        ${flash ? "bg-green-300/30 animate-pulse border-green-500" : ""}
-        ${active && !flash ? "border-orange-400 animate-pulse" : ""}
-      `}
-    />
-  </div>
-
-  {/* Scanning text */}
-  {active && (
-    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white text-lg opacity-80">
-      Scanning…
+      {/* Flash effect */}
+      {flash && (
+        <div className="absolute inset-0 bg-green-300 opacity-20 animate-pulse pointer-events-none"></div>
+      )}
     </div>
-  )}
-</div>
-
   );
 }
