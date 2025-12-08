@@ -83,9 +83,9 @@ export default function Scanner({
       </button>
 
       {/* Center scan box */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none color-white">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div
-          className="border-4 border-black/60 rounded-md"
+          className="border-4 border-white/60 rounded-md"
           style={{ width: qrbox, height: qrbox }}
         />
       </div>
