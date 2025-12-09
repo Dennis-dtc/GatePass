@@ -1,6 +1,8 @@
 // src/components/Scanner.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
+Html5Qrcode.workerPath = import.meta.env.BASE_URL + "html5-qrcode-worker.min.js";
+
 
 export default function Scanner({
   onDetected,
@@ -66,7 +68,7 @@ export default function Scanner({
   }, []);
 
   return (
-    <div className="relative w-full h-full bg-black">
+    <div className="relative w-full h-full bg-green">
       {/* Camera container */}
       <div
         id={containerId.current}
