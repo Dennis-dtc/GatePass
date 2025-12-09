@@ -1,7 +1,6 @@
 // src/components/Scanner.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-Html5Qrcode.workerPath = import.meta.env.BASE_URL + "html5-qrcode-worker.min.js";
 
 
 export default function Scanner({
