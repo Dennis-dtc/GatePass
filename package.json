@@ -17,11 +17,13 @@
     "gh-pages": "^6.3.0",
     "html5-qrcode": "^2.3.8",
     "jsbarcode": "^3.12.1",
+    "jsqr": "^1.4.0",
     "lucide-react": "^0.556.0",
     "qr-scanner": "^1.4.2",
+    "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
     "react-router-dom": "^7.10.0"
   },
   "devDependencies": {

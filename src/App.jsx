@@ -19,14 +19,8 @@ import SecurityHome from './pages/SecurityHome';
 import AdminAuth from './components/AdminAuth';
 import AdminDashboard from './pages/AdminDashboard';
 
-// Notifications
-import { NotificationProvider } from "./context/NotificationContext";
-import OverrideDialogs from "./utils/OverrideDialogs";
-
 export default function App() {
   return (
-    <NotificationProvider>
-      <OverrideDialogs />  {/* <-- enables global alert/confirm/prompt override */}
       <AuthProvider>
         <Routes>
           <Route path="/" element={<LandingPage />} />
@@ -68,6 +62,5 @@ export default function App() {
           />
         </Routes>
       </AuthProvider>
-    </NotificationProvider>
   );
 }
