@@ -5,3 +5,12 @@
 body {
     @apply bg-gray-100 text-gray-900 font-sans;
 }
+
+/* Prevent overflowing content on small screens */
+img, table, pre { max-width: 100%; height: auto; }
+table { table-layout: auto; }
+th, td { word-break: break-word; }
+
+/* Prevent horizontal overscroll/bounce on mobile */
+html, body { overscroll-behavior-x: none; }
+

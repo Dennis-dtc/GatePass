@@ -1,71 +1,21 @@
 ﻿// src/pages/SecurityHome.jsx
-import React, { useEffect, useState, createContext, useContext } from "react";
-import { collection, query, where, onSnapshot, getDocs, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
+import { collection, query, where, onSnapshot, getDocs, getDoc, updateDoc, doc, serverTimestamp, addDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../components/Toast";
 import TopBar from "../components/TopBar";
 import DeviceCard from "../components/DeviceCard";
 import Scanner from "../components/Scanner";
 import QRCodeGenerator from "../components/QRCodeGenerator";
+import FlagModal from '../components/FlagModal';
+import EditSecurityModal from '../components/EditSecurityModal';
 
-/* -------------------- Toast System -------------------- */
-const ToastContext = createContext();
-function useToast() {
-  return useContext(ToastContext);
-}
-function ToastProvider({ children }) {
-  const [toasts, setToasts] = useState([]);
-
-  const add = (message, opts = {}) => {
-    const id = Math.random().toString(36).slice(2, 9);
-    const toast = {
-      id,
-      message,
-      type: opts.type || "info",
-      timeout: opts.timeout ?? 4000
-    };
-
-    setToasts((s) => [toast, ...s]);
-
-    if (toast.timeout > 0) {
-      setTimeout(() => {
-        setToasts((s) => s.filter((t) => t.id !== id));
-      }, toast.timeout);
-    }
-  };
-
-  const remove = (id) => setToasts((s) => s.filter((t) => t.id !== id));
-
-  return (
-    <ToastContext.Provider value={{ add, remove }}>
-      {children}
-
-      <div className="fixed right-4 top-4 z-50 flex flex-col gap-2">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`max-w-sm px-4 py-2 rounded shadow-md text-white ${
-              t.type === "success"
-                ? "bg-green-600"
-                : t.type === "error"
-                ? "bg-red-600"
-                : "bg-gray-800"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm">{t.message}</div>
-              <button onClick={() => remove(t.id)} className="text-xs opacity-70">✕</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </ToastContext.Provider>
-  );
-}
+/* Using shared ToastProvider via useToast import */
 
 /* -------------------- Main Component -------------------- */
 function SecurityHomeContent() {
-  const { auth } = useAuth();
+  const { auth, logout } = useAuth();
   const securityUID = auth?.uid || null;
 
   const toast = useToast();
@@ -77,6 +27,12 @@ function SecurityHomeContent() {
   const [securityUser, setSecurityUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [qrGeneratorDevice, setQrGeneratorDevice] = useState(null); // device for QR generation modal
+  const [manualInput, setManualInput] = useState("");
+  const [flagTarget, setFlagTarget] = useState(null);
+  const [flagReason, setFlagReason] = useState('');
+  const [showFlagModal, setShowFlagModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
 
   /* -------------------- Load allowed devices -------------------- */
   useEffect(() => {
@@ -167,20 +123,64 @@ function SecurityHomeContent() {
         lastScannedBy: securityUID
       });
 
+      try {
+        await addDoc(collection(db, 'logs'), {
+          deviceID: dev.id,
+          ownerUID: dev.ownerUID || null,
+          expectedSN: dev.deviceSN || null,
+          isMatch: true,
+          action: newStatus === 'in_school' ? 'in' : 'out',
+          securityUID,
+          securityName: securityUser?.name || securityUser?.email || null,
+          timestamp: serverTimestamp()
+        });
+      } catch (e) { console.error('Failed to write sticker log', e); }
+
       toast.add(`Device ${text} ${newStatus}.`, { type: "success" });
     } catch {
       toast.add("Sticker scan failed.", { type: "error" });
     }
   };
 
+  const onManualSearch = async () => {
+    if (!manualInput || manualInput.trim() === '') {
+      toast.add('Enter a serial number or registration number', { type: 'error' });
+      return;
+    }
+
+    // reuse the scanner detection logic to populate results
+    await onScannerDetected(manualInput.trim());
+    setManualInput('');
+  };
+
   /* -------------------- Action buttons -------------------- */
   const verifyDevice = async (id) => {
     try {
-      await updateDoc(doc(db, "devices", id), {
+      const deviceRef = doc(db, 'devices', id);
+      const deviceSnap = await getDoc(deviceRef);
+      const deviceData = deviceSnap.exists() ? deviceSnap.data() : {};
+
+      await updateDoc(deviceRef, {
         status: "in_school",
         lastVerifiedAt: serverTimestamp(),
         lastScannedBy: securityUID
       });
+      // update last active on this security user's profile
+      try { await updateDoc(doc(db, 'users', securityUID), { lastActive: serverTimestamp() }); } catch (e) {}
+      // write a log entry for clock-in
+      try {
+        await addDoc(collection(db, 'logs'), {
+          deviceID: id,
+          ownerUID: deviceData.ownerUID || null,
+          expectedSN: deviceData.deviceSN || null,
+          isMatch: true,
+          action: 'in',
+          securityUID,
+          securityName: securityUser?.name || securityUser?.email || null,
+          timestamp: serverTimestamp()
+        });
+      } catch (e) { console.error('Failed to write clock-in log', e); }
+
       toast.add("Clocked in.", { type: "success" });
     } catch (err) {
       console.error("Clock in failed:", err);
@@ -190,15 +190,104 @@ function SecurityHomeContent() {
 
   const clockOutDevice = async (id) => {
     try {
-      await updateDoc(doc(db, "devices", id), {
-        status: "out_school",
+      const deviceRef = doc(db, 'devices', id);
+      const devSnap = await getDoc(deviceRef);
+      const deviceData = devSnap.exists() ? devSnap.data() : {};
+
+      await updateDoc(deviceRef, {
+        status: "out",
         lastVerifiedAt: serverTimestamp(),
         lastScannedBy: securityUID
       });
+
+      try {
+        await addDoc(collection(db, 'logs'), {
+          deviceID: id,
+          ownerUID: deviceData.ownerUID || null,
+          expectedSN: deviceData.deviceSN || null,
+          isMatch: true,
+          action: 'out',
+          securityUID,
+          securityName: securityUser?.name || securityUser?.email || null,
+          timestamp: serverTimestamp()
+        });
+      } catch (e) { console.error('Failed to write clock-out log', e); }
       toast.add("Clocked out.", { type: "success" });
+      try { await updateDoc(doc(db, 'users', securityUID), { lastActive: serverTimestamp() }); } catch (e) {}
     } catch (err) {
       console.error("Clock out failed:", err);
       toast.add("Clock out failed.", { type: "error" });
+    }
+  };
+
+  const flagMismatch = async (id, payload) => {
+    try {
+      const reason = payload?.reason || null;
+      const serial = payload?.serial || null;
+      await updateDoc(doc(db, 'devices', id), {
+        snMismatch: true,
+        flagged: true,
+        flagReason: reason,
+        flaggedSN: serial || null,
+        flaggedBy: securityUID,
+        flaggedAt: serverTimestamp()
+      });
+
+      // fetch device data up-front so flag creation below has reliable context
+      let deviceData = {};
+      try {
+        const devSnap = await getDoc(doc(db, 'devices', id));
+        deviceData = devSnap.exists() ? devSnap.data() : {};
+      } catch (e) {
+        console.error('Failed to fetch device data before logging/flagging', e);
+      }
+
+      try {
+        await addDoc(collection(db, 'logs'), {
+          deviceID: id,
+          ownerUID: deviceData.ownerUID || null,
+          expectedSN: deviceData.deviceSN || null,
+          isMatch: false,
+          action: 'mismatch',
+          flagged: true,
+          flagReason: reason || null,
+          flaggedSN: serial || null,
+          securityUID,
+          securityName: securityUser?.name || securityUser?.email || null,
+          timestamp: serverTimestamp()
+        });
+      } catch (e) { console.error('Failed to write mismatch log', e); }
+
+      // ensure a deterministic flag document (avoid race creating duplicates)
+      try {
+        const key = `${id}::${serial || '__NONE__'}`;
+        await setDoc(doc(db, 'flags', key), {
+          deviceID: id,
+          ownerUID: deviceData.ownerUID || null,
+          expectedSN: deviceData.deviceSN || null,
+          flaggedSN: serial || null,
+          flagReason: reason || null,
+          flaggedBy: securityUID || null,
+          flaggedByName: securityUser?.name || securityUser?.email || null,
+          flaggedAt: serverTimestamp(),
+          status: 'open'
+        }, { merge: true });
+        toast.add('Created/updated flag record', { type: 'success' });
+        console.info('Upserted flag', key, 'for device', id);
+      } catch (fe) { console.error('Failed to upsert flag record', fe); toast.add('Failed to create/update flag record: ' + (fe.message || fe), { type: 'error' }); }
+
+
+
+
+      toast.add('Device flagged for mismatch.', { type: 'success' });
+      try { await updateDoc(doc(db, 'users', securityUID), { lastActive: serverTimestamp() }); } catch (e) {}
+    } catch (err) {
+      console.error(err);
+      toast.add('Failed to flag device.', { type: 'error' });
+    } finally {
+      setShowFlagModal(false);
+      setFlagTarget(null);
+      setFlagReason('');
     }
   };
 
@@ -221,6 +310,8 @@ function SecurityHomeContent() {
     (d.registrationNumber || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  
+
   /* -------------------- Render -------------------- */
   return (
     <div className="min-h-screen bg-gray-100">
@@ -231,6 +322,8 @@ function SecurityHomeContent() {
             { label: "Allowed Devices", onClick: () => { setActiveTab("allowed"); setScannerMode(null); } },
             { label: "Profile", onClick: () => { setActiveTab("profile"); setScannerMode(null); } }
           ]}
+          onLogout={logout}
+          logoutLabel="End Shift"
         />
 
         <div className="p-6 max-w-6xl mx-auto">
@@ -245,32 +338,6 @@ function SecurityHomeContent() {
                 <button onClick={openStickerScanner} className="px-4 py-2 bg-gray-800 text-white rounded">
                   Open Sticker Scanner
                 </button>
-              </div>
-
-              {/* Scanner Mount Area */}
-              <div className="w-full h-96 bg-gray-200 rounded overflow-hidden">
-                {scannerMode === "qr" && (
-                  <Scanner
-                    onDetected={onScannerDetected}
-                    onClose={closeScanner}
-                    qrbox={260}
-                  />
-                )}
-
-                {scannerMode === "sticker" && (
-                  <Scanner
-                    onDetected={onStickerDetected}
-                    onClose={closeScanner}
-                    qrbox={300}
-                    continuous={true}
-                  />
-                )}
-
-                {!scannerMode && !scannedResults && (
-                  <div className="p-10 text-center text-blue-600">
-                    Click a open camera scanner button to begin.
-                  </div>
-                )}
               </div>
 
               {scannedResults && (
@@ -306,12 +373,52 @@ function SecurityHomeContent() {
                               Scan Next
                             </button>
                           </div>
+                          <div className="flex gap-2 mt-2">
+                            <button onClick={() => { setFlagTarget(d.id); setShowFlagModal(true); }} className="flex-1 px-3 py-1 bg-red-700 text-white rounded text-sm hover:bg-red-800">Flag Mismatch</button>
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+
+                        {/* Scanner Mount Area */}
+                <div className="w-full h-96 bg-gray-200 rounded overflow-hidden">
+                  {scannerMode === "qr" && (
+                    <Scanner
+                      onDetected={onScannerDetected}
+                      onClose={closeScanner}
+                      qrbox={260}
+                    />
+                  )}
+
+                  {scannerMode === "sticker" && (
+                    <Scanner
+                      onDetected={onStickerDetected}
+                      onClose={closeScanner}
+                      qrbox={300}
+                      continuous={true}
+                    />
+                  )}
+
+                  {!scannerMode && !scannedResults && (
+                    <div className="p-10 text-center text-blue-600">
+                      <div>Click a open camera scanner button to begin.</div>
+                      <div className="mt-3 flex items-center justify-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Enter SN or Registration No"
+                          value={manualInput}
+                          onKeyDown={e => { if (e.key === 'Enter') onManualSearch(); }}
+                          onChange={e => setManualInput(e.target.value)}
+                          className="px-3 py-2 border rounded w-64"
+                        />
+                        <button onClick={onManualSearch} className="px-4 py-2 bg-blue-600 text-white rounded">Search</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
             </>
           )}
 
@@ -322,7 +429,7 @@ function SecurityHomeContent() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {allowedDevices.length > 0 ? (
                   allowedDevices.map((d) => (
-                    <div key={d.id} className="p-4 bg-white rounded shadow">
+                    <div key={d.id} className="p-4">
                       <DeviceCard device={d} />
                     </div>
                   ))
@@ -345,6 +452,15 @@ function SecurityHomeContent() {
                   <p>Email: {securityUser.email}</p>
                   <p>Role: {securityUser.role}</p>
                   <p>Location: {securityUser.locationID}</p>
+                  <p className="mt-2"><strong>Shift started:</strong> {securityUser.shiftStartedAt ? (typeof securityUser.shiftStartedAt.toDate === 'function' ? securityUser.shiftStartedAt.toDate().toLocaleString() : new Date(securityUser.shiftStartedAt).toLocaleString()) : '—'}</p>
+                  {(!securityUser.name) && (
+                    <div className="mt-3 p-3 bg-yellow-50 border-l-4 border-yellow-400">
+                      <p className="text-sm">Please update your full name in your profile — a name helps students and admins identify you.</p>
+                    </div>
+                  )}
+                  <div className="mt-3 flex gap-2 justify-end">
+                    <button onClick={() => { setEditingUser(securityUser); setShowEditModal(true); }} className="px-3 py-1 bg-blue-600 text-white rounded">Edit Profile</button>
+                  </div>
                 </>
               ) : (
                 <p>Loading…</p>
@@ -360,14 +476,30 @@ function SecurityHomeContent() {
             onClose={() => setQrGeneratorDevice(null)}
           />
         )}
+
+        {showEditModal && editingUser && (
+          <EditSecurityModal
+            user={editingUser}
+            onClose={() => { setShowEditModal(false); setEditingUser(null); }}
+            onSaved={() => { setShowEditModal(false); setEditingUser(null); toast.add('Saved', { type: 'success' }); }}
+          />
+        )}
+
+        {showFlagModal && flagTarget && (
+          <FlagModal
+            title="Flag Mismatch"
+            placeholder="Reason (optional)"
+            defaultValue={flagReason}
+            onSubmit={(val) => flagMismatch(flagTarget, val)}
+            onClose={() => setShowFlagModal(false)}
+          />
+        )}
       </div>
     );
 }
 
 export default function SecurityHome() {
   return (
-    <ToastProvider>
-      <SecurityHomeContent />
-    </ToastProvider>
+    <SecurityHomeContent />
   );
 }

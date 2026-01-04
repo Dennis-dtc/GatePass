@@ -20,7 +20,10 @@ export default function DeviceCard({ device }) {
   };
 
   return (
-    <div className="p-4 bg-white rounded-xl shadow text-center hover:shadow-lg transition duration-200">
+    <div className="relative p-4 bg-white rounded-xl shadow text-center hover:shadow-lg transition duration-200">
+      {device.flagged && (
+        <div className="absolute -mt-10 ml-4 bg-red-600 text-white text-xs px-2 py-1 rounded">FLAGGED</div>
+      )}
       <p className="text-lg font-semibold mb-1">
         {device.deviceModel || "Unknown Device"}
       </p>
@@ -51,6 +54,9 @@ export default function DeviceCard({ device }) {
         <p className="text-xs text-gray-400">
           By: {device.lastScannedBy}
         </p>
+      )}
+      {device.ownerName && (
+        <p className="text-xs text-gray-600 mt-2">Owner: {device.ownerName}</p>
       )}
     </div>
   );

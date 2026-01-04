@@ -9,6 +9,7 @@ import jsQR from "jsqr";
  *    onClose() => void
  *    qrbox = number (px)
  *    continuous = boolean
+ *    defaultFacingMode = "user" | "environment" (default: "environment")
  *
  * Notes:
  * - Uses native BarcodeDetector when available.
@@ -16,14 +17,14 @@ import jsQR from "jsqr";
  * - For browsers without BarcodeDetector you should wire in jsQR in the fallback (commented).
  */
 
-export default function Scanner({ onDetected, onClose, qrbox = 280, continuous = false }) {
+export default function Scanner({ onDetected, onClose, qrbox = 280, continuous = false, defaultFacingMode = "environment" }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const pollingRef = useRef(null);
   const lastDetectedRef = useRef({ text: null, time: 0 });
 
-  const [facingMode, setFacingMode] = useState("environment");
+  const [facingMode, setFacingMode] = useState(defaultFacingMode);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [supportedFormats, setSupportedFormats] = useState([]);

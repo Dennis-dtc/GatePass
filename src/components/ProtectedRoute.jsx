@@ -8,6 +8,10 @@ import { useAuth } from '../context/AuthContext';
  */
 export default function ProtectedRoute({ element, role }) {
   const { auth } = useAuth();
+  const { initialized } = useAuth();
+
+  // Wait for auth initialization to avoid redirect on refresh
+  if (!initialized) return null;
 
   // Not logged in at all
   if (!auth.uid || !auth.role) {

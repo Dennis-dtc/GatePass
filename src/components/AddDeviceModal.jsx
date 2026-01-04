@@ -1,13 +1,18 @@
 // src/components/AddDeviceModal.jsx
 import React, { useState } from "react";
+import { useToast } from './Toast';
 
 export default function AddDeviceModal({ onSubmit, onClose }) {
   const [deviceModel, setDeviceModel] = useState("");
   const [deviceSN, setDeviceSN] = useState("");
 
+  const toast = useToast();
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!deviceSN || !deviceSN.trim()) return alert("Enter the device serial number (SN).");
+    if (!deviceSN || !deviceSN.trim()) {
+      toast.add('Enter the device serial number (SN).', { type: 'error' });
+      return;
+    }
     onSubmit({ deviceModel: deviceModel.trim(), deviceSN: deviceSN.trim() });
   };
 

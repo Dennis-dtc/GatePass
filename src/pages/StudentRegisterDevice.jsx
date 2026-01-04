@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { db, auth } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useToast } from '../components/Toast';
 
 export default function StudentRegisterDevice({ onDone }) {
+  const toast = useToast();
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [deviceSN, setDeviceSN] = useState('');
   const [deviceModel, setDeviceModel] = useState('');
@@ -12,12 +14,12 @@ export default function StudentRegisterDevice({ onDone }) {
 
     const user = auth.currentUser;
     if (!user) { 
-      alert('Not authenticated'); 
+      toast.add('Not authenticated', { type: 'error' }); 
       return; 
     }
 
     if (!registrationNumber || !deviceSN) {
-      alert('Please fill in registration number and device serial number.');
+      toast.add('Please fill in registration number and device serial number.', { type: 'error' });
       return;
     }
 
@@ -41,7 +43,7 @@ export default function StudentRegisterDevice({ onDone }) {
       setDeviceModel('');
     } catch (err) {
       console.error(err);
-      alert('Failed to register device: ' + err.message);
+      toast.add('Failed to register device: ' + err.message, { type: 'error' });
     }
   };
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 
 import { AuthProvider } from "./context/AuthContext";
+import { ToastProvider } from './components/Toast';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Landing
@@ -18,10 +19,12 @@ import SecurityHome from './pages/SecurityHome';
 // Admin
 import AdminAuth from './components/AdminAuth';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminReports from './pages/AdminReports';
 
 export default function App() {
   return (
       <AuthProvider>
+        <ToastProvider>
         <Routes>
           <Route path="/" element={<LandingPage />} />
 
@@ -60,7 +63,17 @@ export default function App() {
               />
             }
           />
+          <Route
+            path="/admin/reports"
+            element={
+              <ProtectedRoute
+                role="admin"
+                element={<AdminReports />}
+              />
+            }
+          />
         </Routes>
+      </ToastProvider>
       </AuthProvider>
   );
 }
